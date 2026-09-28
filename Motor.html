@@ -1,0 +1,73 @@
+<script>
+/**
+ * MOTOR DE CÁLCULO — fonte única, usada pelo painel (navegador) e pelo servidor (.gs).
+ * No servidor: carregarMotor_() faz eval deste arquivo. Não coloque nada de DOM aqui.
+ */
+var TAB_SN = {
+ I:[[.040,0,0],[.073,5940,0],[.095,13860,0],[.107,22500,0],[.143,87300,0],[.190,378000,0]],
+ II:[[.045,0,0],[.078,5940,0],[.100,13860,0],[.112,22500,0],[.147,85500,0],[.300,720000,0]],
+ III:[[.060,0,.335],[.112,9360,.320],[.135,17640,.325],[.160,35640,.325],[.210,125640,.335],[.330,648000,0]],
+ IV:[[.045,0,.445],[.090,8100,.400],[.102,12420,.400],[.140,39780,.400],[.220,183780,.434],[.330,828000,0]],
+ V:[[.155,0,.140],[.180,4500,.170],[.195,9900,.190],[.205,17100,.210],[.230,62100,.235],[.305,540000,0]]
+};
+/* partilha LC 123/2006: [irpj,csll,cofins,pis,cpp,ipi,icms,iss] em % do DAS */
+var PART_SN = {
+ I:[[5.5,3.5,12.74,2.76,41.5,0,34,0],[5.5,3.5,12.74,2.76,41.5,0,34,0],[5.5,3.5,12.74,2.76,42,0,33.5,0],[5.5,3.5,12.74,2.76,42,0,33.5,0],[5.5,3.5,12.74,2.76,42,0,33.5,0],[13.5,10,28.27,6.13,42.1,0,0,0]],
+ II:[[5.5,3.5,11.51,2.49,37.5,7.5,32,0],[5.5,3.5,11.51,2.49,37.5,7.5,32,0],[5.5,3.5,11.51,2.49,37.5,7.5,32,0],[5.5,3.5,11.51,2.49,37.5,7.5,32,0],[5.5,3.5,11.51,2.49,37.5,7.5,32,0],[8.5,7.5,20.96,4.54,23.5,35,0,0]],
+ III:[[4,3.5,12.82,2.78,43.4,0,0,33.5],[4,3.5,14.05,3.05,43.4,0,0,32],[4,3.5,13.64,2.96,43.4,0,0,32.5],[4,3.5,13.64,2.96,43.4,0,0,32.5],[4,3.5,12.82,2.78,43.4,0,0,33.5],[35,15,16.03,3.47,30.5,0,0,0]],
+ IV:[[18.8,15.2,17.67,3.83,0,0,0,44.5],[19.8,15.2,20.55,4.45,0,0,0,40],[20.8,15.2,19.73,4.27,0,0,0,40],[17.8,19.2,18.9,4.1,0,0,0,40],[18.8,19.2,18.08,3.92,0,0,0,40],[53.5,21.5,20.55,4.45,0,0,0,0]],
+ V:[[25,15,14.1,3.05,28.85,0,0,14],[23,15,14.1,3.05,27.85,0,0,17],[24,15,14.1,3.05,23.85,0,0,20],[21,15,14.1,3.05,23.85,0,0,23],[23,12.5,14.1,3.05,23.85,0,0,23.5],[35,15.5,16.44,3.56,29.5,0,0,0]]
+};
+var LIM_SN=[180000,360000,720000,1800000,3600000,4800000];
+var TETO_ISS=0.05;
+var ITENS_ART127={"07.01":1,"07.03":1,"07.19":1,"07.20":1,"31.01":1,"05.01":1,"05.03":1,"05.04":1,
+  "17.16":1,"17.19":1,"17.14":1,"17.20":1,"17.21":1,"27.01":1,"29.01":1,"30.01":1};
+
+function faixaDe(base){
+  for(var i=0;i<6;i++){ if(base<=LIM_SN[i]) return i+1; }
+  return 0; /* 0 = excedeu o limite */
+}
+function anexoValido(a){ a=String(a||"").trim().toUpperCase(); return TAB_SN[a]?a:"III"; }
+
+/**
+ * inp: {anexo, rbt12, rbt12p, fat, red, exp, cbs, ibs, incIbs, issFora, icmsImune,
+ *       usaExtrato, dasReal, pisReal, cofReal}
+ * Espelha as fórmulas das colunas G, J, K, L, R, S, T, U, W, AB, AE, AF e AM da
+ * aba "Simples Nacional" da planilha original.
+ */
+function calcular(inp){
+  var base = (inp.rbt12p>0? inp.rbt12p : inp.rbt12)||0;
+  var fx = faixaDe(base), excedeu = (fx===0); if(excedeu) fx=6;
+  var anexo = anexoValido(inp.anexo);
+  var f = TAB_SN[anexo][fx-1], p = PART_SN[anexo][fx-1];
+  var aliqCheia = base<=0 ? f[0] : (base*f[0]-f[1])/base;
+  var pctPis=p[3]/100, pctCof=p[2]/100, pctIcms=p[6]/100;
+  var pctImune=(p[2]+p[3]+p[5]+p[6]+p[7])/100;
+  var expo = Math.min(inp.exp||0,1);
+  var ajust = aliqCheia*(1-expo*pctImune) - (inp.icmsImune? aliqCheia*pctIcms : 0);
+  var semISS = (anexo==="I"||anexo==="II");
+  var issDest = semISS? null : (f[2]===0 ? "fora" : Math.min(aliqCheia*f[2], TETO_ISS));
+  var issFora = (issDest==="fora") ? (inp.issFora||0)*(1-expo) : 0;
+  var fat = inp.fat||0;
+  var dasCalc = ajust*fat;
+  var das = (inp.dasReal>0)? inp.dasReal : dasCalc;
+  var pis, cof, usouExtrato=false;
+  if(inp.usaExtrato && ((inp.pisReal||0)>0 || (inp.cofReal||0)>0)){ pis=inp.pisReal||0; cof=inp.cofReal||0; usouExtrato=true; }
+  else { pis=das*pctPis; cof=das*pctCof; }
+  var dasLiq = Math.max(dasCalc-pis-cof,0);
+  var red = inp.red||0;
+  var cbs = fat*(inp.cbs||0)*(1-red)*(1-expo);
+  var ibs = fat*(inp.ibs||0)*(1-red)*(1-expo);
+  var hib = dasLiq + cbs + (inp.incIbs? ibs : 0);
+  var issForaR = issFora*fat;
+  var cargaAtual = ajust + issFora;
+  var cargaHib = (fat>0? hib/fat : 0) + issFora;
+  return {anexo:anexo, faixa:fx, excedeu:excedeu, base:base, aliqCheia:aliqCheia, ajust:ajust,
+    issDest:issDest, issFora:issFora, issForaR:issForaR, pctPis:pctPis, pctCof:pctCof, pctImune:pctImune,
+    pctIcms:pctIcms, nominal:f[0], deduzir:f[1], repISS:f[2], das:das, dasCalc:dasCalc, pis:pis, cofins:cof,
+    dasLiq:dasLiq, usouExtrato:usouExtrato, cbs:cbs, ibs:ibs, hib:hib,
+    aliqPraticada: fat>0? das/fat : 0,
+    cargaAtual:cargaAtual, cargaHib:cargaHib, dif:hib-dasCalc, difPP:(cargaHib-cargaAtual)*100,
+    totAtual:dasCalc+issForaR, totHib:hib+issForaR};
+}
+</script>
