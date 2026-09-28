@@ -1,6 +1,6 @@
-# Simulador Reforma Sn 2027
+# Demonstração — Simulador da reforma 2027 para serviços no Simples
 
-> Projeto de portfólio de **Victória Pedrosa** (Automação, Processos e Dados). Automação desenvolvida para um escritório de contabilidade; **esta é uma versão com dados fictícios** — nomes, CNPJs, e-mails e IDs internos foram substituídos.
+> Projeto de portfólio de **Victória Pedrosa**. **Demonstração** de simulador da reforma 2027 para serviços no Simples — versão com dados fictícios (nomes, CNPJs, e-mails e IDs internos substituídos).
 
 ## Problema de negócio
 Empresas de serviços no Simples precisam escolher entre DAS integral e Simples híbrido em 2027; exige extratos, classificação e comunicação ao cliente.
